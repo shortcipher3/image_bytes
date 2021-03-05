@@ -6,10 +6,15 @@ care to deal at the technical level you may be better served by trying `rawpixel
 `opencv` now also supports converting a wide variety of bayer and yuv images.
 
 ## Examples
+
+Convert a IYUV to rgb
 ```
 from image_bytes.image_bytes import *
 
-
+yuv = file2arr('data/image_720x1280.yuv', 720, 1280, bpp=1, rowwise=True, yuv_channels=True)
+y, u, v = arr2yuv(yuv)
+color = yuv2rgb(y, u, v)
+cv2.imwrite('output/image_720x1280.jpg', color[:, :, ::-1])
 ```
 
 This yuv image has only the Y-channel:

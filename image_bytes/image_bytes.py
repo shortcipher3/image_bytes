@@ -44,7 +44,7 @@ def yuv2rgb(y, u, v):
     b = clamp(b, 0, 255)
     return cv2.merge((r, g, b))
 
-def file2arr(path, width, height, offset=0, bpp=2, rowwise=True, yuv_channels=False, bytes_read=False):
+def file2arr(path, height, width, offset=0, bpp=2, rowwise=True, yuv_channels=False, bytes_read=False):
     """
     Converts an image file to an array
     Parameters
@@ -78,9 +78,9 @@ def file2arr(path, width, height, offset=0, bpp=2, rowwise=True, yuv_channels=Fa
     for k in range(int(width*height*yuv_mult)):
         vec.append(struct.unpack(byte_str, val[(offset+bpp*k):(offset+bpp*(k+1))]))
     if rowwise:
-        arr = np.reshape(vec, (int(width*yuv_mult), height))
-    else:
         arr = np.reshape(vec, (int(height*yuv_mult), width))
+    else:
+        arr = np.reshape(vec, (int(width*yuv_mult), height))
     arr = arr.astype(out_type)
     if not bytes_read:
         return arr
