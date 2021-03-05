@@ -3,8 +3,7 @@ import numpy as np
 import cv2
 import struct
 
-# TODO - deal with headers
-# TODO deal with video
+# TODO - deal with headers, continued reads smarter
 # TODO remove unused code from the library
 # TODO support different yuv formats, eg nv12
 
@@ -45,16 +44,20 @@ def yuv2rgb(y, u, v):
     b = clamp(b, 0, 255)
     return cv2.merge((r, g, b))
 
-def file2arr(path, width, height, bpp=2, rowwise=True, yuv=False):
+def file2arr(path, width, height, offset=0, bpp=2, rowwise=True, yuv_channels=False, bytes_read=False):
     """
     Converts an image file to an array
     Parameters
       path: the filepath to the image
       width: the image width
       height: the image height
+      offset: offset to begin reading (useful for headers/video)
       bpp: the number of bytes per pixel
+      yuv_channels: if True will read y, u, and v channels otherwise assumes 1 channel
+      bytes_read: return the number of bytes read, useful if making multiple reads
     Returns
       array: the image as a numpy array of the designated size
+      bytes_read: the number of bytes read
     """
     if bpp==1:
         byte_str = "<B"
@@ -64,27 +67,32 @@ def file2arr(path, width, height, bpp=2, rowwise=True, yuv=False):
         out_type = np.uint16
     else:
         raise("unsupported byte per pixel size: " + str(bpp))
-    if yuv:
+    if yuv_channels:
         yuv_mult = 1.5
     else:
         yuv_mult = 1
+    bytes_to_read = int(width*height*bpp*yuv_mult+offset)
     with open(path, 'rb') as f:
-        val = f.read(int(width*height*bpp*yuv_mult))
+        val = f.read(bytes_to_read)
     vec = []
     for k in range(int(width*height*yuv_mult)):
-        vec.append(struct.unpack(byte_str, val[(bpp*k):(bpp*(k+1))]))
+        vec.append(struct.unpack(byte_str, val[(offset+bpp*k):(offset+bpp*(k+1))]))
     if rowwise:
         arr = np.reshape(vec, (int(width*yuv_mult), height))
     else:
         arr = np.reshape(vec, (int(height*yuv_mult), width))
     arr = arr.astype(out_type)
-    return arr
+    if not bytes_read:
+        return arr
+    else:
+        return arr, bytes_to_read
 
-def arr2yuv(arr):
+def arr2yuv(arr, yuv_order: bool=True):
     """
     Convert the flat array to y, u, and v arrays (IYUV-420 format)
     Parameters
       arr: the flat array
+      yuv_order: True for yuv, False for yvu order
     Returns
       y: the y channel
       u: the u channel
@@ -96,7 +104,10 @@ def arr2yuv(arr):
     y = np.reshape(vec[:width*height], (height, width))
     u = np.reshape(vec[(width*height):(width*height+width*height//2//2)], (height//2, width//2))
     v = np.reshape(vec[(width*height+width*height//2//2):(width*height+width*height//2//2*2)], (height//2, width//2))
-    return y, u, v
+    if yuv_order:
+        return y, u, v
+    else:
+        return y, v, u
 
 def flat2channels(raw, offsets=[[[0,0]],[[1,0],[0,1]],[[1,1]]], blocksize=(2,2)):
     """
@@ -177,24 +188,23 @@ def yuvfile2rgb(filepath_in, filepath_out, x=1920, y=1920):
     rgb = yuv2rgb(y, u, v)
     cv2.imwrite(filepath_out, rgb)
 
-def read_yuv_video(path, output_folder):
-    frame_width = 1920
-    frame_height = 1920
+def read_yuv_video(path, output_folder, width, height, bpp=1, rowwise=True, yuv_channels=False, header_len=0):
     idx = 0
-    with open(path, 'rb') as f:
-        while True:
-            val = f.read(int(frame_width*frame_height*1.5))
-            if len(val)!=int(frame_width*frame_height*1.5):
-                break
-            vec = []
-            for k in range(int(frame_width*frame_height*1.5)):
-                vec.append(struct.unpack("<B", val[k]))
-            y = np.reshape(vec[:frame_width*frame_height], (frame_height, frame_width))
-            u = np.reshape(vec[frame_width*frame_height:(frame_width*frame_height+frame_width*frame_height//2//2)], (frame_height//2, frame_width//2))
-            v = np.reshape(vec[(frame_width*frame_height+frame_width*frame_height//2//2):(frame_width*frame_height+frame_width*frame_height//2//2*2)],
-                           (frame_height//2, frame_width//2))
+    bytes_read = 0
+    while True:
+        offset = bytes_read + header_len
+        try:
+            arr, bytes_read = file2arr(path, width, height, offset=offset, bpp=bpp,
+                                       rowwise=rowwise, yuv_channels=yuv_channels, bytes_read=True)
+        except:
+            break
+        if yuv_channels:
+            y, v, u = arr2yuv(arr)
             rgb = yuv2rgb(y, u, v)
-            cv2.imwrite(output_folder + str(idx) + ".png", cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_RGB2BGR))
-            idx += 1
+            result = cv2.cvtColor(rgb.astype(np.uint8))
+        else:
+            result = arr.astype(np.uint8)
+        cv2.imwrite(output_folder + str(idx) + ".png", result)
+        idx += 1
 
 
