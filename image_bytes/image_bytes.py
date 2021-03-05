@@ -4,8 +4,6 @@ import cv2
 import struct
 
 # TODO - deal with headers, continued reads smarter
-# TODO remove unused code from the library
-# TODO support different yuv formats, eg nv12
 
 def clamp(a, lower, upper):
     """
@@ -87,7 +85,7 @@ def file2arr(path, height, width, offset=0, bpp=2, rowwise=True, yuv_channels=Fa
     else:
         return arr, bytes_to_read
 
-def arr2yuv(arr, yuv_order: bool=True):
+def arr2yuv(arr, yuv_order: bool=True, interleaved: bool=False):
     """
     Convert the flat array to y, u, and v arrays (IYUV-420 format)
     Parameters
@@ -102,8 +100,12 @@ def arr2yuv(arr, yuv_order: bool=True):
     width = arr.shape[1]
     vec = arr.ravel()
     y = np.reshape(vec[:width*height], (height, width))
-    u = np.reshape(vec[(width*height):(width*height+width*height//2//2)], (height//2, width//2))
-    v = np.reshape(vec[(width*height+width*height//2//2):(width*height+width*height//2//2*2)], (height//2, width//2))
+    if not interleaved:
+        u = np.reshape(vec[(width*height):(width*height+width*height//2//2)], (height//2, width//2))
+        v = np.reshape(vec[(width*height+width*height//2//2):(width*height+width*height//2//2*2)], (height//2, width//2))
+    else:
+        u = np.reshape(vec[(width*height):(width*height+width*height//2):2], (height//2, width//2))
+        v = np.reshape(vec[(width*height+1):(width*height+width*height//2):2], (height//2, width//2))
     if yuv_order:
         return y, u, v
     else:
