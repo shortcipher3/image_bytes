@@ -201,9 +201,10 @@ def read_yuv_video(path, output_folder, width, height, bpp=1, rowwise=True, yuv_
         except:
             break
         if yuv_channels:
-            y, v, u = arr2yuv(arr)
-            rgb = yuv2rgb(y, u, v)
-            result = cv2.cvtColor(rgb.astype(np.uint8))
+            #y, v, u = arr2yuv(arr)
+            #rgb = yuv2rgb(y, u, v)
+            #result = rgb.astype(np.uint8)
+            result = cv2.cvtColor(arr.astype(np.uint8), cv2.COLOR_YUV2BGR_NV12)
         else:
             result = arr.astype(np.uint8)
         cv2.imwrite(output_folder + str(idx) + ".png", result)
