@@ -69,12 +69,13 @@ def file2arr(path, height, width, offset=0, bpp=2, rowwise=True, yuv_channels=Fa
         yuv_mult = 1.5
     else:
         yuv_mult = 1
-    bytes_to_read = int(width*height*bpp*yuv_mult+offset)
+    pixels_to_read = int(width*height*yuv_mult)
+    bytes_to_read = int(pixels_to_read*bpp)
     with open(path, 'rb') as f:
+        f.seek(offset)
         val = f.read(bytes_to_read)
-    vec = []
-    for k in range(int(width*height*yuv_mult)):
-        vec.append(struct.unpack(byte_str, val[(offset+bpp*k):(offset+bpp*(k+1))]))
+        offset = f.tell()
+    vec = struct.unpack(byte_str[0] + byte_str[1]*pixels_to_read, val)
     if rowwise:
         arr = np.reshape(vec, (int(height*yuv_mult), width))
     else:
@@ -83,7 +84,7 @@ def file2arr(path, height, width, offset=0, bpp=2, rowwise=True, yuv_channels=Fa
     if not bytes_read:
         return arr
     else:
-        return arr, bytes_to_read
+        return arr, offset
 
 def arr2yuv(arr, yuv_order: bool=True, interleaved: bool=False):
     """
@@ -165,19 +166,16 @@ def file2yuv(filepath, width=1920, height=1920, bts=1, color=1):
     for single image file
     to do color/grayscale, bytes better
     """
+    pixels_to_read = int(width*height*1.5)
+    bytes_to_read = int(pixels_to_read*bts)
+    with open(filepath, 'rb') as f:
+        val = f.read(bytes_to_read)
     if bts==2:
-        with open(filepath, 'rb') as f:
-            val = f.read(int(width*height*2*1.5))
-        vec = []
-        for k in range(int(width*height*1.5)):
-            vec.append(struct.unpack("<h", val[(2*k):(2*(k+1))]))
+        byte_str = "h"
     elif bts==1:
-        with open(filepath, 'rb') as f:
-            val = f.read(int(width*height*1.5))
-        vec = []
-        for k in range(int(width*height*1.5)):
-            vec.append(struct.unpack("<B", val[k:(k+1)]))
+        byte_str = "B"
 
+    vec = struct.unpack("<" + byte_str*pixels_to_read, val[:bytes_to_read])
 
     y = np.reshape(vec[:width*height], (height, width))
     u = np.reshape(vec[(width*height):(width*height+width*height//2//2)], (height//2, width//2))
@@ -191,6 +189,9 @@ def yuvfile2rgb(filepath_in, filepath_out, x=1920, y=1920):
     cv2.imwrite(filepath_out, rgb)
 
 def read_yuv_video(path, output_folder, width, height, bpp=1, rowwise=True, yuv_channels=False, header_len=0):
+    """
+    reads frames from a yuv video and writes each frame to an image file
+    """
     idx = 0
     bytes_read = 0
     while True:
@@ -209,5 +210,32 @@ def read_yuv_video(path, output_folder, width, height, bpp=1, rowwise=True, yuv_
             result = arr.astype(np.uint8)
         cv2.imwrite(output_folder + str(idx) + ".png", result)
         idx += 1
+
+
+def read_yuv_frame(path, output_folder, width, height, bpp=1, rowwise=True, yuv_channels=False, offset=0):
+    """
+    reads a single frame from a yuv video (offset specifies which frame) and returns the frame and
+    the offset for the next frame
+    Parameters
+      path: the filepath to the yuv video (frames can be different sizes)
+      width: the image width
+      height: the image height
+      offset: offset to begin reading (useful for headers/video)
+      bpp: the number of bytes per pixel
+      yuv_channels: if True will read y, u, and v channels otherwise assumes 1 channel
+    Returns
+      image: the bgr image as a numpy array of the designated size
+      new_offset: where to start the next read
+    """
+    arr, offset = file2arr(path, width, height, offset=offset, bpp=bpp,
+                               rowwise=rowwise, yuv_channels=yuv_channels, bytes_read=True)
+    if yuv_channels:
+        #y, v, u = arr2yuv(arr)
+        #rgb = yuv2rgb(y, u, v)
+        #result = rgb.astype(np.uint8)
+        img = cv2.cvtColor(arr.astype(np.uint8), cv2.COLOR_YUV2BGR_NV12)
+    else:
+        img = arr.astype(np.uint8)
+    return img, offset
 
 
